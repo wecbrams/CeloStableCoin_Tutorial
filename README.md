@@ -124,16 +124,19 @@ contract MyStablecoin is ERC20 {
     uint256 private reserveRatio;
     mapping(address => uint256) private reserveFunds;
 
+    // The construtor function is the first function to be ran once a user interacts with the contract.
     constructor() ERC20("My Stablecoin", "MYS") {
         governance = msg.sender;
         reserveRatio = 5000; // Example reserve ratio, adjust as needed
     }
 
+    // A modifier that we can assign to certain functions to make sure that they can only be called by governance.
     modifier onlyGovernance() {
         require(msg.sender == governance, "Only governance can call this function");
         _;
     }
 
+    // Setter function for reserveRatio variable
     function setReserveRatio(uint256 ratio) external onlyGovernance {
         reserveRatio = ratio;
     }
