@@ -56,13 +56,16 @@ Governance mechanisms are another crucial element in the stability protocol of c
 
 ## Advantages of the Celo Dollar:
 
-1. **Accessibility:**
-   Individuals lacking access to banking services or facing economic instability are often excluded from traditional financial institutions. The Celo Dollar (cUSD) addresses this gap by providing a dependable and easily accessible medium of exchange. Its digital nature allows users to conduct seamless and secure transactions, irrespective of their location or financial circumstances. Leveraging the infrastructure of the Celo blockchain, cUSD facilitates global economic participation, fostering financial inclusivity and empowerment. Furthermore, cUSD extends opportunities to individuals in regions with volatile or underperforming national currencies. By using cUSD, they can mitigate the risks associated with currency fluctuations and maintain a stable store of value. This stability creates a favorable environment for commerce, savings, and investments, promoting economic growth and prosperity for those facing vulnerabilities.
 
-2. **Security & transparency:** come standard with distributed ledger technology. Users benefit from the ease of a reliable medium of exchange while maintaining confidence in the integrity of their transactions.
+**Financial Inclusion:** Celo Dollar tackles the exclusion of individuals from traditional banking services, providing a reliable and easily accessible medium of exchange. Its digital nature enables secure transactions globally, empowering those facing economic instability or lacking access to conventional financial institutions.
 
-3. **Low Transaction Fees:** makes cUSD an attractive option for microtransactions and everyday purchases. Whether you're sending money to a friend or making a purchase, the cost-efficiency of cUSD makes it a practical choice.
+**Stability in Volatile Regions:** cUSD extends opportunities to individuals in areas with unstable national currencies, offering a shield against currency fluctuations. This stability fosters a conducive environment for commerce, savings, and investments, contributing to economic growth and prosperity in vulnerable regions.
 
+**Security and Transparency:** Built on distributed ledger technology, cUSD ensures the security and transparency of transactions, instilling confidence in users regarding the integrity of their financial activities.
+
+**Low Transaction Fees:** The cost-efficiency of cUSD makes it an appealing option for microtransactions and everyday purchases, providing a practical choice for users sending money to friends or engaging in routine transactions.
+
+**Stable Peg to USD:** Celo Dollar's ability to maintain a stable peg to the USD serves as a valuable placeholder in the highly volatile crypto market. Traders can use cUSD as a reliable medium for trading and temporarily holding value, mitigating the impact of price fluctuations often experienced in the broader cryptocurrency space. This stability provides a secure anchor for users navigating the dynamic nature of the crypto market, allowing them to preserve the value of their assets during periods of volatility.
 ## Building a Stablecoin on the Celo Blockchain:
 
 For individuals eager to establish their own stablecoin on the Celo blockchain, a key understanding of the Smart Contract creation process is essential. Robust tools such as Hardhat and Solidity play a pivotal role in simplifying the development of Smart Contracts and their subsequent deployment on the Celo blockchain.
@@ -115,45 +118,60 @@ Within your project directory, create a new Solidity file for your stablecoin co
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
-contract MyStablecoin is ERC20 {
+contract MyStablecoin is ERC20, Ownable {
     using SafeMath for uint256;
 
-    address private governance;
-    uint256 private reserveRatio;
-    mapping(address => uint256) private reserveFunds;
+    uint256 private constant DECIMALS = 2; // Number of decimal places for the token
+    uint256 private reserveRatio; // The percentage of total supply maintained as a reserve
+    mapping(address => uint256) private reserveFunds; // Mapping to track reserve funds per user
 
-    // The construtor function is the first function to be ran once a user interacts with the contract.
+    event Mint(address indexed recipient, uint256 amount);
+    event Burn(address indexed burner, uint256 amount);
+    event ReserveWithdraw(address indexed beneficiary, uint256 amount);
+
     constructor() ERC20("My Stablecoin", "MYS") {
-        governance = msg.sender;
-        reserveRatio = 5000; // Example reserve ratio, adjust as needed
+        reserveRatio = 5000; // Example reserve ratio, adjust as needed (50.00%)
     }
 
-    // A modifier that we can assign to certain functions to make sure that they can only be called by governance.
-    modifier onlyGovernance() {
-        require(msg.sender == governance, "Only governance can call this function");
+    // Modifier to ensure only the governance or owner can execute certain functions
+    modifier onlyGovernanceOrOwner() {
+        require(msg.sender == owner() || msg.sender == governance(), "Not authorized");
         _;
     }
 
-    // Setter function for reserveRatio variable
-    function setReserveRatio(uint256 ratio) external onlyGovernance {
+    // Function to retrieve the governance address
+    function governance() public view returns (address) {
+        return owner();
+    }
+
+    // Function to set a new reserve ratio, only callable by governance or owner
+    function setReserveRatio(uint256 ratio) external onlyGovernanceOrOwner {
+        require(ratio <= 10000, "Invalid ratio"); // Ensure ratio is within valid range
         reserveRatio = ratio;
     }
 
-    function mint(address recipient, uint256 amount) external onlyGovernance {
+    // Function to mint new stablecoins, only callable by governance or owner
+    function mint(address recipient, uint256 amount) external onlyGovernanceOrOwner {
         _mint(recipient, amount);
+        emit Mint(recipient, amount);
     }
 
+    // Function to burn stablecoins
     function burn(uint256 amount) external {
         _burn(msg.sender, amount);
+        emit Burn(msg.sender, amount);
     }
 
+    // Override ERC20 transfer function with stability check
     function transfer(address recipient, uint256 amount) public override returns (bool) {
         require(amount <= _calculateStability(amount), "Transfer amount exceeds stability limit");
         return super.transfer(recipient, amount);
     }
 
+    // Override ERC20 transferFrom function with stability check
     function transferFrom(
         address sender,
         address recipient,
@@ -163,25 +181,30 @@ contract MyStablecoin is ERC20 {
         return super.transferFrom(sender, recipient, amount);
     }
 
-    function withdrawReserve(uint256 amount) external onlyGovernance {
+    // Function to withdraw reserve funds, only callable by governance or owner
+    function withdrawReserve(uint256 amount) external onlyGovernanceOrOwner {
         require(amount <= reserveFunds[msg.sender], "Insufficient reserve funds");
         reserveFunds[msg.sender] = reserveFunds[msg.sender].sub(amount);
         _burn(address(this), amount);
         payable(msg.sender).transfer(amount);
+        emit ReserveWithdraw(msg.sender, amount);
     }
 
+    // Function to calculate the stability amount
     function _calculateStability(uint256 amount) private view returns (uint256) {
         uint256 totalSupply = totalSupply();
-        uint256 reserve = totalSupply.mul(reserveRatio).div(10000); // adjust to decimal percentage
+        uint256 reserve = totalSupply.mul(reserveRatio).div(10000);
         uint256 totalReserve = balanceOf(address(this));
         uint256 stabilityAmount = totalSupply.sub(reserve).sub(totalReserve).sub(amount);
         return stabilityAmount;
     }
 
+    // Fallback function to allow users to deposit Ether as reserve funds
     receive() external payable {
         reserveFunds[msg.sender] = reserveFunds[msg.sender].add(msg.value);
     }
 }
+
 
 ```
 
