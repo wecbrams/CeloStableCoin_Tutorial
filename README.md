@@ -91,19 +91,19 @@ You will need to build a Smart Contract utilizing the well-known development fra
 Start by installing Hardhat, a powerful tool for Ethereum and Celo development. Once installed, create a new directory for your project and initialize it with Hardhat.
 
 1. Install Hardhat globally:
+```bash
+npm install -g hardhat
+```
+3. Create a new directory for your project:
+```bash
+mkdir my-stablecoin-project
 
-`npm install -g hardhat`
-
-2. Create a new directory for your project:
-
-`mkdir my-stablecoin-project`
-
-`cd my-stablecoin-project`
-
+cd my-stablecoin-project
+```
 3. Initialize the project with Hardhat:
-
-`npx hardhat init`
-
+```bash
+npx hardhat init
+```
 The above code snippet assumes you have [Node.js](https://nodejs.org/en/download) and [npm](https://www.npmjs.com/package/download) (Node Package Manager) installed on your machine. By following these steps, you will have Hardhat installed globally and a new directory created for your stablecoin project. The **`npx hardhat init`** command initializes the project with the necessary configuration files and folder structure provided by Hardhat, allowing you to start developing and deploying your Smart Contracts on the Celo blockchain.
 <br/>
 
@@ -236,74 +236,86 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { AggregatorV3Interface } from "./AggregatorV3Interface.sol";
 
+// MyStablecoin contract inheriting from the ERC20 token standard
 contract MyStablecoin is ERC20 {
-address public governance;
-uint256 public reserveRatio;
-AggregatorV3Interface public priceFeed;
+    address public governance; // Address of the governance entity
+    uint256 public reserveRatio; // Ratio of reserve to total supply
+    AggregatorV3Interface public priceFeed; // Interface for interacting with the price feed Oracle
 
-   constructor(address _priceFeedAddress) ERC20("My Stablecoin", "MYS") {
-    governance = msg.sender;
-    reserveRatio = 200000000000000000; // 20% represented in wei
-    priceFeed = AggregatorV3Interface(_priceFeedAddress);
-}
+    // Constructor initializing key parameters upon deployment
+    constructor(address _priceFeedAddress) ERC20("My Stablecoin", "MYS") {
+        governance = msg.sender; // Assign the deployer's address as the governance entity
+        reserveRatio = 200000000000000000; // Set the reserve ratio to 20% represented in wei
+        priceFeed = AggregatorV3Interface(_priceFeedAddress); // Connect to the provided Oracle price feed
+    }
 
-modifier onlyGovernance() {
-    require(msg.sender == governance, "Only governance can call this function");
-    _;
-}
+    // Modifier to restrict access to only the governance entity
+    modifier onlyGovernance() {
+        require(msg.sender == governance, "Only governance can call this function");
+        _;
+    }
 
-function mint(address recipient, uint256 amount) external onlyGovernance {
-    _mint(recipient, amount);
-}
+    // Function allowing governance to mint new stablecoins and allocate them to a recipient
+    function mint(address recipient, uint256 amount) external onlyGovernance {
+        _mint(recipient, amount);
+    }
 
-function burn(uint256 amount) external {
-    _burn(msg.sender, amount);
-}
+    // Function allowing users to burn their stablecoins, reducing the total token supply
+    function burn(uint256 amount) external {
+        _burn(msg.sender, amount);
+    }
 
-function transfer(address recipient, uint256 amount) public override returns (bool) {
-    require(amount <= calculateStability(amount), "Transfer amount exceeds stability limit");
-    return super.transfer(recipient, amount);
-}
+    // Override of ERC20 transfer function with added stability check
+    function transfer(address recipient, uint256 amount) public override returns (bool) {
+        require(amount <= calculateStability(amount), "Transfer amount exceeds stability limit");
+        return super.transfer(recipient, amount);
+    }
 
-function transferFrom(
-    address sender,
-    address recipient,
-    uint256 amount
-) public override returns (bool) {
-    require(amount <= calculateStability(amount), "Transfer amount exceeds stability limit");
-    return super.transferFrom(sender, recipient, amount);
-}
+    // Override of ERC20 transferFrom function with added stability check
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) public override returns (bool) {
+        require(amount <= calculateStability(amount), "Transfer amount exceeds stability limit");
+        return super.transferFrom(sender, recipient, amount);
+    }
 
-function calculateStability(uint256 amount) public view returns (uint256) {
-    uint256 totalSupply = totalSupply();
-    uint256 reserve = totalSupply * reserveRatio / 1000000000000000000; // convert back to ether
-    return totalSupply - reserve - amount;
-}
+    // Function to calculate the stability amount based on the reserve ratio
+    function calculateStability(uint256 amount) public view returns (uint256) {
+        uint256 totalSupply = totalSupply();
+        uint256 reserve = totalSupply * reserveRatio / 1000000000000000000; // Convert back to ether
+        return totalSupply - reserve - amount;
+    }
 
-function updatePriceFeedAddress(address _priceFeedAddress) external onlyGovernance {
-    priceFeed = AggregatorV3Interface(_priceFeedAddress);
-}
+    // Function allowing governance to update the Oracle price feed address
+    function updatePriceFeedAddress(address _priceFeedAddress) external onlyGovernance {
+        priceFeed = AggregatorV3Interface(_priceFeedAddress);
+    }
 
-function getLatestPrice() public view returns (uint256) {
-    (, int256 price, , , ) = priceFeed.latestRoundData();
-    require(price > 0, "Invalid price"); // Ensure the price is positive
-    return uint256(price);
-}
+    // Function to retrieve the latest price from the Oracle price feed
+    function getLatestPrice() public view returns (uint256) {
+        (, int256 price, , , ) = priceFeed.latestRoundData();
+        require(price > 0, "Invalid price"); // Ensure the price is positive
+        return uint256(price);
+    }
 
-function adjustSupply() external onlyGovernance {
-    uint256 currentPrice = getLatestPrice();
-    uint256 totalSupply = totalSupply();
-    uint256 reserve = totalSupply * reserveRatio / 1000000000000000000; // convert back to ether
-    uint256 targetSupply = reserve * 1000000000000000000 / currentPrice; // convert to wei
-    if (totalSupply > targetSupply) {
-        uint256 amountToBurn = totalSupply - targetSupply;
-        _burn(governance, amountToBurn);
-    } else if (totalSupply < targetSupply) {
-        uint256 amountToMint = targetSupply - totalSupply;
-        _mint(governance, amountToMint);
+    // Function allowing governance to adjust the token supply based on the target reserve ratio
+    function adjustSupply() external onlyGovernance {
+        uint256 currentPrice = getLatestPrice();
+        uint256 totalSupply = totalSupply();
+        uint256 reserve = totalSupply * reserveRatio / 1000000000000000000; // Convert back to ether
+        uint256 targetSupply = reserve * 1000000000000000000 / currentPrice; // Convert to wei
+        if (totalSupply > targetSupply) {
+            uint256 amountToBurn = totalSupply - targetSupply;
+            _burn(governance, amountToBurn);
+        } else if (totalSupply < targetSupply) {
+            uint256 amountToMint = targetSupply - totalSupply;
+            _mint(governance, amountToMint);
+        }
     }
 }
-}
+
 
 ```
 
@@ -332,35 +344,43 @@ After successfully passing all tests, the next step is to deploy your contract t
 Below is an illustrative code snippet demonstrating how to utilize Hardhat's deployment tools to publish your stablecoin contract on the Celo blockchain:
 
 ```javascript
-/ deploy.js
+// deploy.js
 // This script deploys a stablecoin contract on the Celo network using an Oracle price feed address
 
+// Import the necessary Ethereum libraries and tools
 async function main() {
-// Set up your Celo account and network configurations
-const [deployer] = await ethers.getSigners();
+    // Set up your Celo account and network configurations
+    const [deployer] = await ethers.getSigners();
 
-console.log("Deploying contracts with the account:", deployer.address);
+    // Log the deployer's address for reference
+    console.log("Deploying contracts with the account:", deployer.address);
 
-// Set up your contract deployment parameters
-const stablecoinName = "My Stablecoin"; // The name of the stablecoin
-const stablecoinSymbol = "MYS"; // The symbol of the stablecoin
-const priceFeedAddress = "0x1234567890123456789012345678901234567890"; // Replace with actual Oracle price feed address
+    // Set up your contract deployment parameters
+    const stablecoinName = "My Stablecoin"; // Define the name of the stablecoin
+    const stablecoinSymbol = "MYS"; // Define the symbol of the stablecoin
+    const priceFeedAddress = "0x1234567890123456789012345678901234567890"; // Replace with the actual Oracle price feed address
 
-// Deploy your stablecoin contract
-const Stablecoin = await ethers.getContractFactory("MyStablecoin");
-const stablecoin = await Stablecoin.deploy(priceFeedAddress);
+    // Deploy your stablecoin contract using the MyStablecoin contract factory
+    const Stablecoin = await ethers.getContractFactory("MyStablecoin");
+    const stablecoin = await Stablecoin.deploy(priceFeedAddress);
 
-await stablecoin.deployed();
+    // Ensure the stablecoin is successfully deployed
+    await stablecoin.deployed();
 
-console.log("Stablecoin deployed to:", stablecoin.address);
+    // Log the deployed stablecoin contract's address for reference
+    console.log("Stablecoin deployed to:", stablecoin.address);
 }
 
+// Execute the deployment process and handle success or errors
 main()
-.then(() => process.exit(0))
-.catch((error) => {
-console.error(error);
-process.exit(1);
-});
+    .then(() => process.exit(0)) // Exit the process on successful deployment
+    .catch((error) => {
+        // Log any errors that occur during deployment
+        console.error(error);
+        // Exit the process with an error code on deployment failure
+        process.exit(1);
+    });
+
 ```
 
 The JavaScript deployment script in the code snippet above makes use of Hardhat to upload the stablecoin contract to the Celo network. The script is broken down as follows:
@@ -375,7 +395,11 @@ The JavaScript deployment script in the code snippet above makes use of Hardhat 
 
 5. Log the deployed contract's address to the console.
 
-To deploy the contract, you can run this script using Hardhat's deployment command, such as **`npx hardhat run deploy.js --network celo`**. Ensure that you have the necessary network configurations in the Hardhat configuration file like the RPC URL and the private key of the deployer account.
+To deploy the contract, you can run this script using Hardhat's deployment command
+```bash
+npx hardhat run deploy.js --network celo
+``` 
+Ensure that you have the necessary network configurations in the Hardhat configuration file like the RPC URL and the private key of the deployer account.
 
 Note: The code snippet assumes you have a valid Oracle price feed address and that you've replaced the placeholder address **(`0x1234567890123456789012345678901234567890`)** with the actual address of the Oracle price feed.
 
